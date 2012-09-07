@@ -11,6 +11,9 @@
 #include <sys/wait.h>
 #include <signal.h>
 
+#include <iostream>
+using namespace std;
+
 #include "NetNinnyProxy.h"
 
 class NetNinny
@@ -128,7 +131,15 @@ NetNinny::run()
 			close(sockfd); // child doesn't need the listener
 
 			NetNinnyProxy proxy(new_fd);
-			//exit(proxy.run());
+			try {
+				proxy.run();
+			}
+			catch(const char* e_string) {
+				cout << e_string << endl;
+			}
+			catch(...) {}
+
+			exit(0);
 		}
 		close(new_fd);  // parent doesn't need this
 	}

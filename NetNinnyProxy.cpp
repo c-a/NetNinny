@@ -2,9 +2,13 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
-#include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+
+#include <iostream>
+#include <sstream>
+#include <string>
+using namespace std;
 
 #include "NetNinnyProxy.h"
 
@@ -82,18 +86,69 @@ NetNinnyProxy::readRequest(NetNinnyBuffer& buffer)
 	}
 }
 
-int
+static void
+readHeaders(istream& is, string& request)
+{
+	// Read header fields
+	try {
+		while (!is.eof())
+		{
+			static const char* CONNECTION = "Connection:";
+			char line[256];
+
+			is.getline(line, 256);
+			if (!strncmp(line, CONNECTION, strlen(CONNECTION)))
+				continue;
+
+			request.append(line);
+			request.append("\r\n");
+		}
+	}
+	catch (istream::failure& e) {
+		throw "Failed to get HTTP header field";
+	}
+}
+
+void
 NetNinnyProxy::run()
 {
 	NetNinnyBuffer buffer;
 
 	if (!readRequest(buffer))
-		return 0;
+		throw "Failed to read request";
+
+	istringstream iss(buffer.getData());
+	iss.exceptions(istream::failbit  | istream::badbit);
+	char line[256];
+
+	try {
+		iss.getline(line, 256);
+	}
+	catch (istream::failure& e) {
+		throw "Failed to get HTTP start-line";
+	}
+
+	if (!strncmp(line, "GET", 3))
+		throw "Not GET request";
+
+	const char* connection_header = "Connection: Keep-alive\r\n";
+
+	string new_request;
+	new_request.reserve(buffer.getSize()+ strlen(connection_header));
+	new_request.append(line);
+	new_request.append("\r\n");
+
+	readHeaders(iss, new_request);
+	new_request.append(connection_header);
+	new_request.append("\r\n");
+
+	cout << new_request << endl;
 
 	if (send(sockfd, "Hello, world!", 13, 0) == -1)
+	{
 		perror("send");
-
-	return 0;
+		throw "Failed to send response";
+	}
 }
 
 NetNinnyProxy::~NetNinnyProxy()

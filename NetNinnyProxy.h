@@ -41,7 +41,7 @@ private:
 public:
 	NetNinnyProxy(int sockfd);
 
-	int run();
+	void run();
 
 	virtual ~NetNinnyProxy();
 };
