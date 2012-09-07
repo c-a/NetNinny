@@ -1,7 +1,7 @@
 CXX = g++
 
 CXXFLAGS =	-O2 -g -Wall
-LIBS =  -lnsl -lsocket -lresolv
+LIBS =
 
 OBJS =		NetNinny.o NetNinnyProxy.o
 
