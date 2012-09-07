@@ -1,20 +1,19 @@
 CXX = g++
 
-CXXFLAGS =	-O2 -g -Wall -fmessage-length=0
-LDFLAGS = -lnsl -lsocket -lresolv  
-LIBS =
+CXXFLAGS =	-O2 -g -Wall
+LIBS =  -lnsl -lsocket -lresolv
 
 OBJS =		NetNinny.o
 
 TARGET =	NetNinny
 
-SOURCES = NetNinny.cpp
-	
+SOURCES = NetNinnyProxy.cpp NetNinnyProxy.h NetNinny.cpp
+
 $(TARGET):	$(OBJS)
-	$(CXX) $(LDFLAGS) -o $(TARGET) $(OBJS) $(LIBS)
-	
+	$(CXX) -o $(TARGET) $(OBJS) $(LIBS)
+
 NetNinny.o: $(SOURCES)
-	$(CXX) -c $(CXXFLAGS) $(SOURCES)
+	$(CXX) -c $(CXXFLAGS) NetNinny.cpp
 	
 all:	$(TARGET)
 

@@ -19,18 +19,21 @@
 #include <sys/wait.h>
 #include <signal.h>
 
+#include "NetNinnyProxy.h"
+
 class NetNinny
 {
 private:
-	const char* PORT;
+	static const char* PORT;
 	static const int BACKLOG = 10;
 
 public:
-	NetNinny()
-	  : PORT("80") {}
+	NetNinny() {}
 
 	int run();
 };
+
+const char* NetNinny::PORT = "80";
 
 static void
 sigchld_handler(int s)
@@ -131,10 +134,9 @@ NetNinny::run()
 
 		if (!fork()) { // this is the child process
 			close(sockfd); // child doesn't need the listener
-			if (send(new_fd, "Hello, world!", 13, 0) == -1)
-				perror("send");
-			close(new_fd);
-			exit(0);
+
+			NetNinnyProxy proxy(new_fd);
+			//exit(proxy.run());
 		}
 		close(new_fd);  // parent doesn't need this
 	}
