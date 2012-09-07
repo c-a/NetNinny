@@ -1,7 +1,7 @@
 CXX = g++
 
 CXXFLAGS =	-O2 -g -Wall -fmessage-length=0
-LDFLAGS = 
+LDFLAGS = -lnsl -lsocket -lresolv  
 LIBS =
 
 OBJS =		NetNinny.o
