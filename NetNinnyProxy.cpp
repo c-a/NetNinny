@@ -1,10 +1,3 @@
-/*
- * NetNinnyProxy.cpp
- *
- *  Created on: 7 sep 2012
- *      Author: carin003
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
