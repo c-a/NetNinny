@@ -8,8 +8,24 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/socket.h>
+
+class NetNinny
+{
+public:
+	void run();
+};
+
+void
+NetNinny::run()
+{
+	puts("Hello World!!!");
+}
 
 int main(void) {
-	puts("Hello World!!!");
+
+	NetNinny ninny;
+	ninny.run();
+
 	return EXIT_SUCCESS;
 }
