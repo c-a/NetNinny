@@ -3,18 +3,19 @@ CXX = g++
 CXXFLAGS =	-O2 -g -Wall
 LIBS =  -lnsl -lsocket -lresolv
 
-OBJS =		NetNinny.o
+OBJS =		NetNinny.o NetNinnyProxy.o
 
 TARGET =	NetNinny
-
-SOURCES = NetNinnyProxy.cpp NetNinnyProxy.h NetNinny.cpp
 
 $(TARGET):	$(OBJS)
 	$(CXX) -o $(TARGET) $(OBJS) $(LIBS)
 
-NetNinny.o: $(SOURCES)
-	$(CXX) -c $(CXXFLAGS) NetNinny.cpp
-	
+NetNinny.o: NetNinny.cpp
+	$(CXX) $(CXXFLAGS) -c NetNinny.cpp
+
+NetNinnyProxy.o: NetNinnyProxy.cpp NetNinnyProxy.cpp
+	$(CXX) $(CXXFLAGS) -c NetNinnyProxy.cpp
+
 all:	$(TARGET)
 
 clean:

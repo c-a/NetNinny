@@ -29,6 +29,7 @@ NetNinnyProxy::run()
 	return 0;
 }
 
-NetNinnyProxy::~NetNinnyProxy() {
+NetNinnyProxy::~NetNinnyProxy()
+{
 	close(sockfd);
 }

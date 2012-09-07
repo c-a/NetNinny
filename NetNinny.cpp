@@ -147,6 +147,5 @@ NetNinny::run()
 int main(void) {
 
 	NetNinny ninny;
-
 	return ninny.run();
 }
