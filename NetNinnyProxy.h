@@ -22,13 +22,10 @@ public:
     ~NetNinnyBuffer();
 
     char* getData() { return m_data; }
-
     size_t getSize() { return m_size; }
-    size_t getReservedSize() { return m_reserved_size; }
 
-    void setSize(size_t size) { assert(size <= m_reserved_size); m_size = size; }
-    
-	bool reserve(size_t size);
+    char* reserveData(size_t size);
+    void dataWritten(size_t size);
 };
 
 class NetNinnyProxy
@@ -37,6 +34,7 @@ private:
     int sockfd;
 
     bool readRequest(NetNinnyBuffer& buffer);
+    void sendResponse(const char* data, size_t size);
 
 public:
     NetNinnyProxy(int sockfd);

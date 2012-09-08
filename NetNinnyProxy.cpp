@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 #include <errno.h>
 #include <sys/types.h>
@@ -15,32 +16,56 @@ using namespace std;
 
 #define RECV_SIZE 512
 
-NetNinnyBuffer::NetNinnyBuffer()
-: m_data(0),
-m_reserved_size(0),
-m_size(0) {}
+static const char* filter_words[] =
+{
+    "SpongeBob",
+    "BritneySpears",
+    "Paris Hilton",
+    "Norrköping",
+    0
+};
 
-bool
-NetNinnyBuffer::reserve(size_t size)
+static const char* error1_redirect =
+    "HTTP/1.1 301 Moved Permanently\r\n"
+    "Location: http://www.ida.liu.se/~TDTS04/labs/2011/ass2/error1.html\r\n"
+    "\r\n";
+
+NetNinnyBuffer::NetNinnyBuffer() :
+    m_data(0),
+    m_reserved_size(0),
+    m_size(0) {}
+
+char*
+NetNinnyBuffer::reserveData(size_t size)
 {
     if (!m_data)
     {
         m_data = (char*)malloc(size);
         if (!m_data)
-            return false;
+            return 0;
         m_reserved_size = size;
     }
-    else if (size > m_reserved_size)
+    else if (m_size + size > m_reserved_size)
     {
-        void* tmp_data = realloc(m_data, m_reserved_size * 2);
+        size_t new_size = max(m_size + size, m_reserved_size * 2);
+        void* tmp_data = realloc(m_data, new_size);
         if (!tmp_data)
-            return false;
+            return 0;
 
         m_data = (char*)tmp_data;
-        m_reserved_size *= 2;
+        m_reserved_size = new_size;
     }
 
-    return true;
+    return m_data + m_size;
+}
+
+void
+NetNinnyBuffer::dataWritten(size_t size)
+{
+    size_t new_size = m_size + size;
+    assert(new_size <= m_reserved_size);
+
+    m_size = new_size;
 }
 
 NetNinnyBuffer::~NetNinnyBuffer()
@@ -56,15 +81,12 @@ NetNinnyProxy::NetNinnyProxy(int sockfd)
 bool
 NetNinnyProxy::readRequest(NetNinnyBuffer& buffer)
 {
-    if (!buffer.reserve(RECV_SIZE))
-        return false;
-
     while (true)
     {
-        if (!buffer.reserve(buffer.getSize() + RECV_SIZE))
-            return false;
+        char* data;
 
-        ssize_t ret = recv(sockfd, buffer.getData() + buffer.getSize(), RECV_SIZE, 0);
+        data = buffer.reserveData(RECV_SIZE);
+        ssize_t ret = recv(sockfd, data, RECV_SIZE, 0);
         if (ret == -1)
         {
             perror("recv");
@@ -77,36 +99,86 @@ NetNinnyProxy::readRequest(NetNinnyBuffer& buffer)
         }
         else
         {
-            buffer.setSize(buffer.getSize() + ret);
+            buffer.dataWritten(ret);
             if (buffer.getSize() >= 4)
             {
-                if (memcmp(buffer.getData() + buffer.getSize() - 4, "\r\n\r\n", 4))
-                    return 0;
+                if (!memcmp(buffer.getData() + buffer.getSize() - 4, "\r\n\r\n", 4))
+                    return true;
             }
         }
     }
 }
 
 static void
-readHeaders(istream& is, string& request)
+buildNewRequest(NetNinnyBuffer& buffer, string& new_request, bool& keep_alive)
 {
+    keep_alive = false;
+    static const char* connection_header = "Connection: Close\r\n";
+    char line[256];
+
+    new_request.reserve(buffer.getSize()+ strlen(connection_header));
+
+    istringstream iss(buffer.getData());
+    iss.exceptions(istream::badbit);
+
+    try {
+        iss.getline(line, 256);
+    }
+    catch (istream::failure& e) {
+        throw "Failed to get HTTP start-line";
+    }
+
+    new_request.append(line);
+    new_request.append("\n");
+    
     // Read header fields
     try {
-        while (!is.eof())
+        while (iss.good())
         {
-            static const char* CONNECTION = "Connection:";
-            char line[256];
+            static const char* CONNECTION = "connection:";
+            static const char* PROXY_CONNECTION = "proxy-connection:";
 
-            is.getline(line, 256);
-            if (!strncmp(line, CONNECTION, strlen(CONNECTION)))
+            iss.getline(line, 256);
+            if (!strncasecmp(line, CONNECTION, strlen(CONNECTION)) ||
+                !strncasecmp(line, PROXY_CONNECTION, strlen(PROXY_CONNECTION)))
+            {
+                const char* value = strchr(line, ':') + 1;
+                while (*value == ' ') ++value;
+
+                if (!strncasecmp(value, "keep-alive", strlen("keep-alive")))
+                    keep_alive = true;
+
                 continue;
+            }
 
-            request.append(line);
-            request.append("\r\n");
+            if (line[0] != '\0' && line[0] != '\r')
+            {
+                new_request.append(line);
+                new_request.append("\n");
+            }
         }
     }
     catch (istream::failure& e) {
         throw "Failed to get HTTP header field";
+    }
+
+    new_request.append(connection_header);
+    new_request.append("\r\n");
+}
+
+void
+NetNinnyProxy::sendResponse(const char* data, size_t size)
+{
+    size_t sent = 0;
+    while (sent < size)
+    {
+        ssize_t ret = send(sockfd, data + sent, size - sent, 0);
+        if (ret == -1)
+        {
+            perror("send");
+            throw "Failed to send response";
+        }
+        sent += ret;
     }
 }
 
@@ -119,7 +191,7 @@ NetNinnyProxy::run()
         throw "Failed to read request";
 
     istringstream iss(buffer.getData());
-    iss.exceptions(istream::failbit  | istream::badbit);
+    iss.exceptions(istream::badbit);
     char line[256];
 
     try {
@@ -129,27 +201,34 @@ NetNinnyProxy::run()
         throw "Failed to get HTTP start-line";
     }
 
-    if (!strncmp(line, "GET", 3))
+    cout << "Got request: " << line << endl;
+
+    const char* request_type = strtok(line, " ");
+    if (strcmp(request_type, "GET"))
         throw "Not GET request";
 
-    const char* connection_header = "Connection: Keep-alive\r\n";
+    const char* address = strtok(NULL, " ");
+    if (!address)
+        throw "No address specified in GET request";
 
+    // Do the URL filtering
+    for (const char** word = filter_words; *word; ++word)
+    {
+        if (strstr(address, *word))
+        {
+            sendResponse(error1_redirect, strlen(error1_redirect));
+            return;
+        }
+    }
+    
     string new_request;
-    new_request.reserve(buffer.getSize()+ strlen(connection_header));
-    new_request.append(line);
-    new_request.append("\r\n");
-
-    readHeaders(iss, new_request);
-    new_request.append(connection_header);
-    new_request.append("\r\n");
+    bool keep_alive;
+    buildNewRequest(buffer, new_request, keep_alive);
 
     cout << new_request << endl;
+    cout << "Keep alive: " << keep_alive << endl;
 
-    if (send(sockfd, "Hello, world!", 13, 0) == -1)
-    {
-        perror("send");
-        throw "Failed to send response";
-    }
+    sendResponse("Hello, world!", 13);
 }
 
 NetNinnyProxy::~NetNinnyProxy()
