@@ -93,10 +93,19 @@ NetNinnyProxy::readRequest(NetNinnyBuffer& buffer)
         char* data;
 
         data = buffer.reserveData(RECV_SIZE);
+
+        // Timeout after 15 seconds
+        alarm(15);
         ssize_t ret = recv(sockfd, data, RECV_SIZE, 0);
+        // Reset timeout
+        alarm(0);
         if (ret == -1)
         {
-            perror("recv");
+            if (errno == EINTR)
+                printf("No data from client in 15 seconds, closing connection");
+            else
+                perror("recv");
+
             return false;
         }
         else if (ret == 0)
@@ -254,7 +263,8 @@ NetNinnyProxy::run()
             cout << "Got unknown exception" << endl;
             return EXIT_FAILURE;
         }
-        break;
+        if (!keep_alive)
+            break;
     }
 
     return EXIT_SUCCESS;
