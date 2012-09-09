@@ -138,15 +138,10 @@ NetNinny::run()
             close(sockfd); // child doesn't need the listener
 
             NetNinnyProxy proxy(new_fd);
-            try {
-                proxy.run();
-            }
-            catch(const char* e_string) {
-                cout << e_string << endl;
-            }
-            catch(...) {}
+            int ret = proxy.run();
+            proxy.~NetNinnyProxy();
 
-            exit(0);
+            exit(ret);
         }
         close(new_fd);  // parent doesn't need this
     }

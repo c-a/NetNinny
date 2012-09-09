@@ -28,7 +28,14 @@ static const char* filter_words[] =
 static const char* error1_redirect =
     "HTTP/1.1 301 Moved Permanently\r\n"
     "Location: http://www.ida.liu.se/~TDTS04/labs/2011/ass2/error1.html\r\n"
+    "Content-Length: 0\r\n"
     "\r\n";
+
+static const char* test_response =
+    "HTTP/1.1 200 OK\r\n"
+    "Content-Length: 25\r\n"
+    "\r\n"
+    "NetNinny ate your content";
 
 NetNinnyBuffer::NetNinnyBuffer() :
     m_data(0),
@@ -183,7 +190,7 @@ NetNinnyProxy::sendResponse(const char* data, size_t size)
 }
 
 void
-NetNinnyProxy::run()
+NetNinnyProxy::handleRequest(bool& keep_alive)
 {
     NetNinnyBuffer buffer;
 
@@ -220,15 +227,37 @@ NetNinnyProxy::run()
             return;
         }
     }
-    
+
     string new_request;
-    bool keep_alive;
     buildNewRequest(buffer, new_request, keep_alive);
 
     cout << new_request << endl;
     cout << "Keep alive: " << keep_alive << endl;
 
-    sendResponse("Hello, world!", 13);
+    sendResponse(test_response, strlen(test_response));
+}
+
+int
+NetNinnyProxy::run()
+{
+    while (true)
+    {
+        bool keep_alive;
+        try {
+            handleRequest(keep_alive);
+        }
+        catch(const char* e_string) {
+            cout << e_string << endl;
+            return EXIT_FAILURE;
+        }
+        catch(...) {
+            cout << "Got unknown exception" << endl;
+            return EXIT_FAILURE;
+        }
+        break;
+    }
+
+    return EXIT_SUCCESS;
 }
 
 NetNinnyProxy::~NetNinnyProxy()

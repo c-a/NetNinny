@@ -36,10 +36,12 @@ private:
     bool readRequest(NetNinnyBuffer& buffer);
     void sendResponse(const char* data, size_t size);
 
+    void handleRequest(bool& keep_alive);
+
 public:
     NetNinnyProxy(int sockfd);
 
-    void run();
+    int run();
 
     virtual ~NetNinnyProxy();
 };
