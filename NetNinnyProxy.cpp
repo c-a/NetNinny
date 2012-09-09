@@ -6,6 +6,9 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <arpa/inet.h>
 
 #include <iostream>
 #include <sstream>
@@ -80,8 +83,20 @@ NetNinnyBuffer::~NetNinnyBuffer()
     free(m_data);
 }
 
+// get sockaddr, IPv4 or IPv6:
+static void*
+get_in_addr(struct sockaddr *sa)
+{
+    if (sa->sa_family == AF_INET) {
+        return &(((struct sockaddr_in*)sa)->sin_addr);
+    }
+
+    return &(((struct sockaddr_in6*)sa)->sin6_addr);
+}
+
 NetNinnyProxy::NetNinnyProxy(int sockfd)
-: sockfd(sockfd)
+    : client_socket(sockfd),
+      server_socket(-1)
 {
 }
 
@@ -96,13 +111,13 @@ NetNinnyProxy::readRequest(NetNinnyBuffer& buffer)
 
         // Timeout after 15 seconds
         alarm(15);
-        ssize_t ret = recv(sockfd, data, RECV_SIZE, 0);
+        ssize_t ret = recv(client_socket, data, RECV_SIZE, 0);
         // Reset timeout
         alarm(0);
         if (ret == -1)
         {
             if (errno == EINTR)
-                printf("No data from client in 15 seconds, closing connection");
+                printf("No data from client in 15 seconds, closing connection.\n");
             else
                 perror("recv");
 
@@ -110,7 +125,7 @@ NetNinnyProxy::readRequest(NetNinnyBuffer& buffer)
         }
         else if (ret == 0)
         {
-            printf("client closed the connection");
+            fprintf(stderr, "Client closed the connection before complete request was received.\n");
             return false;
         }
         else
@@ -188,7 +203,7 @@ NetNinnyProxy::sendResponse(const char* data, size_t size)
     size_t sent = 0;
     while (sent < size)
     {
-        ssize_t ret = send(sockfd, data + sent, size - sent, 0);
+        ssize_t ret = send(client_socket, data + sent, size - sent, 0);
         if (ret == -1)
         {
             perror("send");
@@ -196,6 +211,52 @@ NetNinnyProxy::sendResponse(const char* data, size_t size)
         }
         sent += ret;
     }
+}
+
+bool
+NetNinnyProxy::connectToServer(const char* address)
+{
+    struct addrinfo hints, *servinfo, *p;
+    int rv;
+    char s[INET6_ADDRSTRLEN];
+
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+
+    if ((rv = getaddrinfo(address, "80", &hints, &servinfo)) != 0)
+    {
+        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+        return false;
+    }
+
+    // loop through all the results and connect to the first we can
+    for(p = servinfo; p != NULL; p = p->ai_next) {
+        if ((server_socket = socket(p->ai_family, p->ai_socktype,
+                p->ai_protocol)) == -1) {
+            perror("socket");
+            continue;
+        }
+
+        if (connect(server_socket, p->ai_addr, p->ai_addrlen) == -1) {
+            close(server_socket);
+            perror("connect");
+            continue;
+        }
+
+        break;
+    }
+
+    if (!p)
+        return false;
+
+    inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr),
+            s, sizeof s);
+    printf("Connected to %s\n", s);
+
+    freeaddrinfo(servinfo); // all done with this structure
+
+    return true;
 }
 
 void
@@ -223,9 +284,17 @@ NetNinnyProxy::handleRequest(bool& keep_alive)
     if (strcmp(request_type, "GET"))
         throw "Not GET request";
 
-    const char* address = strtok(NULL, " ");
+    char* address = strtok(NULL, " ");
     if (!address)
         throw "No address specified in GET request";
+
+    if (strncmp(address, "http://", strlen("http://")))
+        throw "The specified address was not a absolute http URI";
+
+    address += strlen("http://");
+    char* address_end = strchr(address, '/');
+    if (address_end)
+        *address_end = '\0';
 
     // Do the URL filtering
     for (const char** word = filter_words; *word; ++word)
@@ -237,11 +306,14 @@ NetNinnyProxy::handleRequest(bool& keep_alive)
         }
     }
 
+    cout << address << endl;
+    if (!connectToServer(address))
+        throw "Failed to connect to server";
+
     string new_request;
     buildNewRequest(buffer, new_request, keep_alive);
 
     cout << new_request << endl;
-    cout << "Keep alive: " << keep_alive << endl;
 
     sendResponse(test_response, strlen(test_response));
 }
@@ -272,5 +344,8 @@ NetNinnyProxy::run()
 
 NetNinnyProxy::~NetNinnyProxy()
 {
-    close(sockfd);
+    if (client_socket != -1)
+        close(client_socket);
+    if (server_socket != -1)
+        close(server_socket);
 }

@@ -31,10 +31,12 @@ public:
 class NetNinnyProxy
 {
 private:
-    int sockfd;
+    int client_socket, server_socket;
 
     bool readRequest(NetNinnyBuffer& buffer);
     void sendResponse(const char* data, size_t size);
+
+    bool connectToServer(const char* address);
 
     void handleRequest(bool& keep_alive);
 
