@@ -34,6 +34,12 @@ static const char* error1_redirect =
     "Content-Length: 0\r\n"
     "\r\n";
 
+static const char* error2_redirect =
+    "HTTP/1.1 301 Moved Permanently\r\n"
+    "Location: http://www.ida.liu.se/~TDTS04/labs/2011/ass2/error2.html\r\n"
+    "Content-Length: 0\r\n"
+    "\r\n";
+
 NetNinnyBuffer::NetNinnyBuffer(size_t block_size) :
     m_block_size(block_size),
     m_size(0),
@@ -84,6 +90,8 @@ NetNinnyBuffer::getChar(size_t index)
 bool
 NetNinnyBuffer::readLine(string& line)
 {
+    line.clear();
+
     for (; m_index < m_size; ++m_index)
     {
         char c = getChar(m_index);
@@ -91,7 +99,7 @@ NetNinnyBuffer::readLine(string& line)
         if (c == '\n' && !line.empty() && (*line.rbegin()) == '\r')
         {
             line.append(1, c);
-            m_index++;
+            ++m_index;
             return true;
         }
 
@@ -115,7 +123,7 @@ NetNinnyBuffer::getBlock(size_t index, size_t& block_size)
     assert(index < m_blocks.size());
 
     if (index == m_blocks.size() - 1)
-        block_size = m_block_size * m_blocks.size() - m_size;
+        block_size = m_size - m_block_size * (m_blocks.size() - 1);
     else
         block_size = m_block_size;
 
@@ -226,7 +234,7 @@ buildNewRequest(NetNinnyBuffer& buffer, string& new_request, bool& keep_alive)
     static const char* connection_header = "Connection: Close\r\n";
     string line;
 
-    new_request.reserve(buffer.getSize()+ strlen(connection_header));
+    new_request.reserve(buffer.getSize() + strlen(connection_header));
 
     if (!buffer.readLine(line))
         throw "Failed to get HTTP start-line";
@@ -241,6 +249,9 @@ buildNewRequest(NetNinnyBuffer& buffer, string& new_request, bool& keep_alive)
 
         const char* cline = line.c_str();
 
+        if (line[0] == '\r' && line[1] == '\n')
+            break;
+
         if (!strncasecmp(cline, CONNECTION, strlen(CONNECTION)) ||
             !strncasecmp(cline, PROXY_CONNECTION, strlen(PROXY_CONNECTION)))
         {
@@ -253,10 +264,7 @@ buildNewRequest(NetNinnyBuffer& buffer, string& new_request, bool& keep_alive)
             continue;
         }
 
-        if (!line.empty() && line[0] != '\r')
-        {
-            new_request.append(line);
-        }
+        new_request.append(line);
     }
 
     new_request.append(connection_header);
@@ -325,6 +333,62 @@ NetNinnyProxy::connectToServer(const char* address)
     return true;
 }
 
+bool
+NetNinnyProxy::filterResponse(NetNinnyBuffer& buffer)
+{
+    string line;
+
+    if (!buffer.readLine(line))
+        return false;
+
+    // read headers
+    while (buffer.readLine(line))
+    {
+        const char* CONTENT_TYPE = "content-type:";
+        const char* CONTENT_ENCODING = "content-encoding:";
+        
+        // end of headers
+        if (line[0] == '\r' && line[1] == '\n')
+            break;
+
+        const char* cline = line.c_str();
+        for (; *cline == ' '; ++cline);
+
+        if (!strncasecmp(cline, CONTENT_TYPE, strlen(CONTENT_TYPE)))
+        {
+            const char* content_type = cline + strlen(CONTENT_TYPE);
+            for (; *content_type == ' '; ++content_type);
+            if (strncasecmp(content_type, "text", strlen("text")) != 0)
+                return false;
+        }
+        else if (!strncasecmp(cline, CONTENT_ENCODING, strlen(CONTENT_ENCODING)))
+            return false;
+    }
+
+    // Search for the forbidden strings in the content.
+    for (size_t i = buffer.getIndex(); i < buffer.getSize(); ++i)
+    {
+        for (const char** word = filter_words; *word; ++word)
+        {
+            size_t j = i;
+            const char* w = *word;
+            while (j < buffer.getSize() && *w != '\0')
+            {
+                if (buffer.getChar(j) != *w)
+                    break;
+
+                ++j;
+                ++w;
+            }
+
+            if (*w == '\0')
+                return true;
+        }
+    }
+
+    return false;
+}
+
 void
 NetNinnyProxy::handleRequest(bool& keep_alive)
 {
@@ -357,9 +421,6 @@ NetNinnyProxy::handleRequest(bool& keep_alive)
         throw "The specified address was not an absolute http URI";
 
     address += strlen("http://");
-    char* address_end = strchr(address, '/');
-    if (address_end)
-        *address_end = '\0';
 
     // Do the URL filtering
     for (const char** word = filter_words; *word; ++word)
@@ -370,6 +431,10 @@ NetNinnyProxy::handleRequest(bool& keep_alive)
             return;
         }
     }
+    
+    char* address_end = strchr(address, '/');
+    if (address_end)
+        *address_end = '\0';
 
     cout << address << endl;
     if (!connectToServer(address))
@@ -381,16 +446,23 @@ NetNinnyProxy::handleRequest(bool& keep_alive)
     buildNewRequest(buffer, new_request, keep_alive);
     sendMessage(server_socket, new_request.c_str(), new_request.size());
 
+    cout << new_request;
+
     // Read the response from the server
     NetNinnyBuffer response(BLOCK_SIZE);
     readResponse(response);
 
-    // Send the response back to the client
-    for (size_t i = 0; i < response.getNumBlocks(); i++)
+    if (filterResponse(response))
+        sendMessage(client_socket, error2_redirect, strlen(error2_redirect));
+    else
     {
-        size_t block_size;
-        char *block = response.getBlock(i, block_size);
-        sendMessage(client_socket, block, block_size);
+        // Send the response back to the client
+        for (size_t i = 0; i < response.getNumBlocks(); i++)
+        {
+            size_t block_size;
+            char *block = response.getBlock(i, block_size);
+            sendMessage(client_socket, block, block_size);
+        }
     }
 }
 

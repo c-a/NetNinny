@@ -29,6 +29,7 @@ public:
 
     size_t getSize() { return m_size; }
     size_t getNumBlocks() { return m_size / m_block_size; }
+    size_t getIndex() { return m_index; }
 
     char* reserveData(size_t& size);
     void dataWritten(size_t size);
@@ -50,6 +51,7 @@ private:
     void readResponse(NetNinnyBuffer& buffer);
 
     bool connectToServer(const char* address);
+    bool filterResponse(NetNinnyBuffer& buffer);
 
     void handleRequest(bool& keep_alive);
 
