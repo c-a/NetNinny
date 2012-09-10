@@ -10,26 +10,35 @@
 
 #include <assert.h>
 
-#include <list>
+#include <string>
+#include <vector>
 
 class NetNinnyBuffer
 {
 private:
-    char* m_data;
-    size_t m_reserved_size;
-    size_t m_size;
+    std::vector<char*> m_blocks;
+    size_t m_block_size;
+
+    size_t m_size, m_index;
+
+    NetNinnyBuffer(const NetNinnyBuffer& buffer);
 
 public:
-    NetNinnyBuffer();
-    NetNinnyBuffer(const NetNinnyBuffer& buffer);
+    NetNinnyBuffer(size_t block_size);
     ~NetNinnyBuffer();
 
-    char* getData() { return m_data; }
     size_t getSize() { return m_size; }
-    size_t getReservedSize() { return m_reserved_size; }
+    size_t getNumBlocks() { return m_size / m_block_size; }
 
-    char* reserveData(size_t size);
+    char* reserveData(size_t& size);
     void dataWritten(size_t size);
+
+    char getChar(size_t index);
+    bool readLine(string& line);
+
+    void seek(size_t index);
+
+    char* getBlock(size_t index, size_t &block_ssize);
 };
 
 class NetNinnyProxy
@@ -38,7 +47,7 @@ private:
     int client_socket, server_socket;
 
     bool readRequest(NetNinnyBuffer& buffer);
-    void readResponse(std::list<NetNinnyBuffer>& response);
+    void readResponse(NetNinnyBuffer& buffer);
 
     bool connectToServer(const char* address);
 
