@@ -34,16 +34,21 @@ static const char* error1_redirect =
     "Content-Length: 0\r\n"
     "\r\n";
 
-static const char* test_response =
-    "HTTP/1.1 200 OK\r\n"
-    "Content-Length: 25\r\n"
-    "\r\n"
-    "NetNinny ate your content";
-
 NetNinnyBuffer::NetNinnyBuffer() :
     m_data(0),
     m_reserved_size(0),
     m_size(0) {}
+
+NetNinnyBuffer::NetNinnyBuffer(const NetNinnyBuffer& buffer)
+{
+    m_data = (char*)malloc(buffer.m_reserved_size);
+    if (!m_data)
+        throw bad_alloc();
+    memcpy(m_data, buffer.m_data, buffer.m_size);
+
+    m_reserved_size = buffer.m_reserved_size;
+    m_size = buffer.m_size;
+}
 
 char*
 NetNinnyBuffer::reserveData(size_t size)
@@ -108,6 +113,8 @@ NetNinnyProxy::readRequest(NetNinnyBuffer& buffer)
         char* data;
 
         data = buffer.reserveData(RECV_SIZE);
+        if (!data)
+            throw bad_alloc();
 
         // Timeout after 15 seconds
         alarm(15);
@@ -127,7 +134,7 @@ NetNinnyProxy::readRequest(NetNinnyBuffer& buffer)
         {
             fprintf(stderr, "Client closed the connection before complete request was received.\n");
             return false;
-        }
+        }                
         else
         {
             buffer.dataWritten(ret);
@@ -137,6 +144,47 @@ NetNinnyProxy::readRequest(NetNinnyBuffer& buffer)
                     return true;
             }
         }
+    }
+}
+
+void
+NetNinnyProxy::readResponse(list<NetNinnyBuffer>& response)
+{
+    while (true)
+    {
+        NetNinnyBuffer* buffer = 0;
+        char* data;
+
+        if (!response.empty())
+            buffer = &response.back();
+
+        if (!buffer || buffer->getSize() == buffer->getReservedSize())
+        {
+            response.push_back(NetNinnyBuffer());
+            buffer = &response.back();
+            data = buffer->reserveData(RECV_SIZE);
+            if (!data)
+                throw bad_alloc();
+        }
+
+        data = buffer->getData() + buffer->getSize();
+
+        ssize_t ret = recv(server_socket, data,
+                           buffer->getReservedSize() - buffer->getSize(), 0);
+        if (ret == -1)
+        {
+            perror("recv");
+            throw "Failed to read response (recv failed)";
+        }
+        else if (ret == 0)
+        {
+            cout << "Finished" << endl;
+            close(server_socket);
+            server_socket = -1;
+            return;
+        }
+        else
+            buffer->dataWritten(ret);
     }
 }
 
@@ -197,17 +245,17 @@ buildNewRequest(NetNinnyBuffer& buffer, string& new_request, bool& keep_alive)
     new_request.append("\r\n");
 }
 
-void
-NetNinnyProxy::sendResponse(const char* data, size_t size)
+static void
+sendMessage(int socket, const char* data, size_t size)
 {
     size_t sent = 0;
     while (sent < size)
     {
-        ssize_t ret = send(client_socket, data + sent, size - sent, 0);
+        ssize_t ret = send(socket, data + sent, size - sent, 0);
         if (ret == -1)
         {
             perror("send");
-            throw "Failed to send response";
+            throw "Failed to send message";
         }
         sent += ret;
     }
@@ -289,7 +337,7 @@ NetNinnyProxy::handleRequest(bool& keep_alive)
         throw "No address specified in GET request";
 
     if (strncmp(address, "http://", strlen("http://")))
-        throw "The specified address was not a absolute http URI";
+        throw "The specified address was not an absolute http URI";
 
     address += strlen("http://");
     char* address_end = strchr(address, '/');
@@ -301,7 +349,7 @@ NetNinnyProxy::handleRequest(bool& keep_alive)
     {
         if (strstr(address, *word))
         {
-            sendResponse(error1_redirect, strlen(error1_redirect));
+            sendMessage(client_socket, error1_redirect, strlen(error1_redirect));
             return;
         }
     }
@@ -310,12 +358,22 @@ NetNinnyProxy::handleRequest(bool& keep_alive)
     if (!connectToServer(address))
         throw "Failed to connect to server";
 
+    // Send the request to the server
     string new_request;
     buildNewRequest(buffer, new_request, keep_alive);
+    sendMessage(server_socket, new_request.c_str(), new_request.size());
 
-    cout << new_request << endl;
+    // Read the response from the server
+    list<NetNinnyBuffer> response;
+    readResponse(response);
 
-    sendResponse(test_response, strlen(test_response));
+    // Send the response back to the client
+    for (list<NetNinnyBuffer>::iterator it = response.begin();
+         it != response.end(); ++it)
+    {
+        NetNinnyBuffer& buffer = *it;
+        sendMessage(client_socket, buffer.getData(), buffer.getSize());
+    }
 }
 
 int

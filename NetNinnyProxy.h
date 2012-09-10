@@ -10,6 +10,8 @@
 
 #include <assert.h>
 
+#include <list>
+
 class NetNinnyBuffer
 {
 private:
@@ -19,10 +21,12 @@ private:
 
 public:
     NetNinnyBuffer();
+    NetNinnyBuffer(const NetNinnyBuffer& buffer);
     ~NetNinnyBuffer();
 
     char* getData() { return m_data; }
     size_t getSize() { return m_size; }
+    size_t getReservedSize() { return m_reserved_size; }
 
     char* reserveData(size_t size);
     void dataWritten(size_t size);
@@ -34,7 +38,7 @@ private:
     int client_socket, server_socket;
 
     bool readRequest(NetNinnyBuffer& buffer);
-    void sendResponse(const char* data, size_t size);
+    void readResponse(std::list<NetNinnyBuffer>& response);
 
     bool connectToServer(const char* address);
 
