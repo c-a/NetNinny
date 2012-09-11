@@ -57,9 +57,7 @@ NetNinnyBuffer::reserveData(size_t& size)
     }
     else if (m_size == reserved_size)
     {
-        char* block = (char*)malloc(m_block_size);
-        if (!block)
-            throw bad_alloc();
+        char* block = new char[m_block_size];
 
         m_blocks.push_back(block);
         size = m_block_size;
@@ -134,7 +132,7 @@ NetNinnyBuffer::~NetNinnyBuffer()
 {
     for(vector<char*>::iterator it = m_blocks.begin();
         it != m_blocks.end(); ++it)
-        delete (*it);
+        delete[] (*it);
 }
 
 // get sockaddr, IPv4 or IPv6:
@@ -358,7 +356,7 @@ NetNinnyProxy::filterResponse(NetNinnyBuffer& buffer)
         {
             const char* content_type = cline + strlen(CONTENT_TYPE);
             for (; *content_type == ' '; ++content_type);
-            if (strncasecmp(content_type, "text", strlen("text")) != 0)
+            if (strncasecmp(content_type, "text", strlen("text")))
                 return false;
         }
         else if (!strncasecmp(cline, CONTENT_ENCODING, strlen(CONTENT_ENCODING)))
@@ -402,9 +400,7 @@ NetNinnyProxy::handleRequest(bool& keep_alive)
 
     if (!buffer.readLine(line))
         throw "Failed to get HTTP start-line";
-    cline = (char*)malloc(line.size() + 1);
-    if (!cline)
-        throw bad_alloc();
+    cline = new char[line.size() + 1];
     strcpy(cline, line.c_str());
 
     cout << "Got request: " << line << endl;
