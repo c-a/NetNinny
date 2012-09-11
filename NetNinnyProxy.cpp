@@ -476,11 +476,11 @@ NetNinnyProxy::run()
             handleRequest(keep_alive);
         }
         catch(const char* e_string) {
-            cout << e_string << endl;
+            fprintf(stderr, "%s", e_string);
             return EXIT_FAILURE;
         }
         catch(...) {
-            cout << "Got unknown exception" << endl;
+            fprintf(stderr, "Got unknown exception");
             return EXIT_FAILURE;
         }
         if (!keep_alive)
