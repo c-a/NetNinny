@@ -216,7 +216,6 @@ NetNinnyProxy::readResponse(NetNinnyBuffer& buffer)
         }
         else if (ret == 0)
         {
-            cout << "Finished" << endl;
             close(server_socket);
             server_socket = -1;
             return;
@@ -227,7 +226,7 @@ NetNinnyProxy::readResponse(NetNinnyBuffer& buffer)
 }
 
 static void
-buildNewRequest(NetNinnyBuffer& buffer, string& new_request, bool& keep_alive)
+buildNewRequest(NetNinnyBuffer& buffer, string& new_request, bool& keep_alive, string& host)
 {
     keep_alive = false;
     static const char* connection_header = "Connection: Close\r\n";
@@ -245,6 +244,7 @@ buildNewRequest(NetNinnyBuffer& buffer, string& new_request, bool& keep_alive)
     {
         static const char* CONNECTION = "connection:";
         static const char* PROXY_CONNECTION = "proxy-connection:";
+        static const char* HOST = "host:";
 
         const char* cline = line.c_str();
 
@@ -261,6 +261,15 @@ buildNewRequest(NetNinnyBuffer& buffer, string& new_request, bool& keep_alive)
                 keep_alive = true;
 
             continue;
+        }
+        else if (!strncasecmp(cline, HOST, strlen(HOST)))
+        {
+            const char* value = cline + strlen(HOST);
+            while (*value == ' ') ++value;
+
+            const char* value_end = strchr(value, '\r');
+            while (*value_end == ' ') --value_end;
+            host.assign(value, value_end - value);
         }
 
         new_request.append(line);
@@ -287,7 +296,7 @@ sendMessage(int socket, const char* data, size_t size)
 }
 
 bool
-NetNinnyProxy::connectToServer(const char* address)
+NetNinnyProxy::connectToServer(string& host)
 {
     struct addrinfo hints, *servinfo, *p;
     int rv;
@@ -297,7 +306,7 @@ NetNinnyProxy::connectToServer(const char* address)
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
 
-    if ((rv = getaddrinfo(address, "80", &hints, &servinfo)) != 0)
+    if ((rv = getaddrinfo(host.c_str(), "80", &hints, &servinfo)) != 0)
     {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
         return false;
@@ -410,40 +419,33 @@ NetNinnyProxy::handleRequest(bool& keep_alive)
     if (strcmp(request_type, "GET"))
         throw "Not GET request";
 
-    char* address = strtok(NULL, " ");        
-    if (!address)
-        throw "No address specified in GET request";
+    char* path = strtok(NULL, " ");
+    if (!path)
+        throw "No path specified in GET request";
 
-    if (strncmp(address, "http://", strlen("http://")))
-        throw "The specified address was not an absolute http URI";
-
-    address += strlen("http://");
-
-    // Do the URL filtering
+    // Do the path filtering
     for (const char** word = filter_words; *word; ++word)
     {
-        if (strcasestr(address, *word))
+        if (strcasestr(path, *word))
         {
             sendMessage(client_socket, error1_redirect, strlen(error1_redirect));
             return;
         }
     }
-    
-    char* address_end = strchr(address, '/');
-    if (address_end)
-        *address_end = '\0';
 
-    cout << address << endl;
-    if (!connectToServer(address))
+    // Build the new request
+    string new_request, host;
+    buffer.seek(0);
+    buildNewRequest(buffer, new_request, keep_alive, host);
+    if (host.empty())
+        throw "No host specified in the request";
+    cout << "Host: " << host << endl;
+
+    if (!connectToServer(host))
         throw "Failed to connect to server";
 
-    // Send the request to the server
-    string new_request;
-    buffer.seek(0);
-    buildNewRequest(buffer, new_request, keep_alive);
-    sendMessage(server_socket, new_request.c_str(), new_request.size());
-
     cout << new_request;
+    sendMessage(server_socket, new_request.c_str(), new_request.size());
 
     // Read the response from the server
     NetNinnyBuffer response(BLOCK_SIZE);

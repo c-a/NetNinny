@@ -50,7 +50,7 @@ private:
     bool readRequest(NetNinnyBuffer& buffer);
     void readResponse(NetNinnyBuffer& buffer);
 
-    bool connectToServer(const char* address);
+    bool connectToServer(string& host);
     bool filterResponse(NetNinnyBuffer& buffer);
 
     void handleRequest(bool& keep_alive);
