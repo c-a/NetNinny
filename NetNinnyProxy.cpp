@@ -13,6 +13,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <cctype>
 using namespace std;
 
 #include "NetNinnyProxy.h"
@@ -372,7 +373,7 @@ NetNinnyProxy::filterResponse(NetNinnyBuffer& buffer)
             const char* w = *word;
             while (j < buffer.getSize() && *w != '\0')
             {
-                if (buffer.getChar(j) != *w)
+                if (toupper(buffer.getChar(j)) != toupper(*w))
                     break;
 
                 ++j;
@@ -421,7 +422,7 @@ NetNinnyProxy::handleRequest(bool& keep_alive)
     // Do the URL filtering
     for (const char** word = filter_words; *word; ++word)
     {
-        if (strstr(address, *word))
+        if (strcasestr(address, *word))
         {
             sendMessage(client_socket, error1_redirect, strlen(error1_redirect));
             return;
