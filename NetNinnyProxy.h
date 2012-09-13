@@ -28,7 +28,7 @@ public:
     ~NetNinnyBuffer();
 
     size_t getSize() { return m_size; }
-    size_t getNumBlocks() { return m_size / m_block_size; }
+    size_t getNumBlocks() { return m_blocks.size(); }
     size_t getIndex() { return m_index; }
 
     char* reserveData(size_t& size);
