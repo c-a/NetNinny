@@ -13,6 +13,15 @@
 #include <string>
 #include <vector>
 
+/*
+ * NetNinnyBuffer
+ * 
+ * Container class for the requests and responses
+ * that dynamically increases in size if needed.
+ * 
+ * Can output the data char by char or in lines.
+ * 
+ */
 class NetNinnyBuffer
 {
 private:
@@ -42,6 +51,13 @@ public:
     char* getBlock(size_t index, size_t &block_ssize);
 };
 
+/*
+ * NetNinnyProxy
+ * 
+ * Maintains one connection per instance and filters the
+ * requests and responses during the connection session.
+ * 
+ */
 class NetNinnyProxy
 {
 private:

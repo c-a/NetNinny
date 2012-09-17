@@ -16,19 +16,26 @@ using namespace std;
 
 #include "NetNinnyProxy.h"
 
+/*
+ * NetNinny
+ * 
+ * Handles incoming connections from the web browser and spawns
+ * a new instance of NetNinnyProxy for each new connection request.
+ * 
+ * Connection code borrowed from Beej's Guide to Network Programming
+ * and has been slightly modified.
+ */
 class NetNinny
 {
 private:
-    static const char* PORT;
+    static string mPort;
     static const int BACKLOG = 10;
     
 public:
-    NetNinny() {}
+    NetNinny(const char* port) {mPort.assign(port);}
 
     int run();
 };
-
-const char* NetNinny::PORT = "80";
 
 static void
 sigchld_handler(int s)
@@ -149,8 +156,17 @@ NetNinny::run()
     return 0;
 }
 
-int main(void) {
-
-    NetNinny ninny;
-    return ninny.run();
+int main(int argc, char* argv[]) {
+    const char* USAGE = "Usage: NetNinny PORTNUMBER\n"
+    char* port;
+    if (argc == 0)
+        cerr << USAGE;
+    else if (argc > 1) 
+        cout << USAGE;
+    else
+    {
+        NetNinny ninny(argv[0]);
+        return ninny.run();
+    }
+    return -1;
 }
