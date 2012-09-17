@@ -243,6 +243,7 @@ buildNewRequest(NetNinnyBuffer& buffer, string& request_line,
         static const char* CONNECTION = "connection:";
         static const char* PROXY_CONNECTION = "proxy-connection:";
         static const char* HOST = "host:";
+        static const char* ACCEPT_ENCODING = "accept-encoding:";
 
         const char* cline = line.c_str();
 
@@ -269,6 +270,8 @@ buildNewRequest(NetNinnyBuffer& buffer, string& request_line,
             while (*value_end == ' ') --value_end;
             host.assign(value, value_end - value);
         }
+        else if (!strncasecmp(cline, ACCEPT_ENCODING, strlen(ACCEPT_ENCODING)))
+            continue;
 
         new_request.append(line);
     }
