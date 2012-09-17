@@ -513,6 +513,7 @@ NetNinnyProxy::handleRequest(bool& keep_alive)
     {
         if (strcasestr(path.c_str(), *word))
         {
+            cout << "URL was filtered\n";
             sendMessage(client_socket, error1_redirect, strlen(error1_redirect));
             return;
         }
@@ -533,7 +534,6 @@ NetNinnyProxy::handleRequest(bool& keep_alive)
     if (!connectToServer(host))
         throw "Failed to connect to server";
 
-    cout << new_request;
     sendMessage(server_socket, new_request.c_str(), new_request.size());
 
     // Read the response from the server
@@ -541,7 +541,10 @@ NetNinnyProxy::handleRequest(bool& keep_alive)
     readResponse(response);
 
     if (filterResponse(response))
+    {
+        cout << "Content was filtered\n";
         sendMessage(client_socket, error2_redirect, strlen(error2_redirect));
+    }
     else
     {
         // Send the response back to the client
@@ -569,7 +572,7 @@ NetNinnyProxy::run()
             handleRequest(keep_alive);
         }
         catch(const char* e_string) {
-            fprintf(stderr, "%s", e_string);
+            fprintf(stderr, "%s\n", e_string);
             return EXIT_FAILURE;
         }
         catch(...) {
