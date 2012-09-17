@@ -226,7 +226,8 @@ NetNinnyProxy::readResponse(NetNinnyBuffer& buffer)
 }
 
 static void
-buildNewRequest(NetNinnyBuffer& buffer, string& new_request, bool& keep_alive, string& host)
+buildNewRequest(NetNinnyBuffer& buffer, string& request_line,
+                string& new_request, bool& keep_alive, string& host)
 {
     keep_alive = false;
     static const char* connection_header = "Connection: Close\r\n";
@@ -234,10 +235,7 @@ buildNewRequest(NetNinnyBuffer& buffer, string& new_request, bool& keep_alive, s
 
     new_request.reserve(buffer.getSize() + strlen(connection_header));
 
-    if (!buffer.readLine(line))
-        throw "Failed to get HTTP start-line";
-
-    new_request.append(line);
+    new_request.append(request_line);
     
     // Read header fields
     while (buffer.readLine(line))
@@ -406,37 +404,51 @@ NetNinnyProxy::handleRequest(bool& keep_alive)
         throw "Failed to read request";
 
     string line;
-    char* cline;
+    const char* cline;
 
     if (!buffer.readLine(line))
         throw "Failed to get HTTP start-line";
-    cline = new char[line.size() + 1];
-    strcpy(cline, line.c_str());
+    cline = line.c_str();
 
     cout << "Got request: " << line << endl;
 
-    const char* request_type = strtok(cline, " ");
-    if (strcmp(request_type, "GET"))
+    if (strncmp(cline, "GET", 3))
         throw "Not GET request";
 
-    char* path = strtok(NULL, " ");
-    if (!path)
+    const char* cpath = strstr(cline, " ");
+    if (!cpath)
         throw "No path specified in GET request";
+    while (*cpath == ' ') cpath++;
+    if (!strncmp(cpath, "http://", strlen("http://")))
+    {
+        cpath += strlen("http://");
+        cpath = strstr(cpath, "/");
+        if (!cpath)
+            throw "Invalid path provided in GET request";
+    }
+    const char* cpath_end = strstr(cpath, " ");
+    if (!cpath_end)
+        throw "Invalid GET request";
+    
+    string path(cpath, cpath_end - cpath);
 
     // Do the path filtering
     for (const char** word = filter_words; *word; ++word)
     {
-        if (strcasestr(path, *word))
+        if (strcasestr(path.c_str(), *word))
         {
             sendMessage(client_socket, error1_redirect, strlen(error1_redirect));
             return;
         }
     }
 
+    string request_line("GET ");
+    request_line.append(path);
+    request_line.append(cpath_end);
+
     // Build the new request
     string new_request, host;
-    buffer.seek(0);
-    buildNewRequest(buffer, new_request, keep_alive, host);
+    buildNewRequest(buffer, request_line, new_request, keep_alive, host);
     if (host.empty())
         throw "No host specified in the request";
     cout << "Host: " << host << endl;
