@@ -46,8 +46,6 @@ public:
     char getChar(size_t index);
     bool readLine(string& line);
 
-    void seek(size_t index);
-
     char* getBlock(size_t index, size_t &block_ssize);
 };
 

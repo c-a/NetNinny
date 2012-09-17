@@ -46,6 +46,12 @@ NetNinnyBuffer::NetNinnyBuffer(size_t block_size) :
     m_size(0),
     m_index(0) {}
 
+/**
+ * Reserve a data block to write into.
+ * 
+ * @param size The size of the data block.
+ * @return A data block to write into.
+ */
 char*
 NetNinnyBuffer::reserveData(size_t& size)
 {
@@ -68,6 +74,11 @@ NetNinnyBuffer::reserveData(size_t& size)
         assert(!"Should not be here");
 }
 
+/**
+ * Notify the buffer that @size data was written.
+ * 
+ * @param size The number of bytes that was written into the buffer.
+ */
 void
 NetNinnyBuffer::dataWritten(size_t size)
 {
@@ -77,6 +88,12 @@ NetNinnyBuffer::dataWritten(size_t size)
     m_size = new_size;
 }
 
+/**
+ * Get the character at @index.
+ * 
+ * @param index The position of the character to get.
+ * @return The character.
+ */
 char
 NetNinnyBuffer::getChar(size_t index)
 {
@@ -86,6 +103,12 @@ NetNinnyBuffer::getChar(size_t index)
     return block[index % m_block_size];
 }
 
+/**
+ * Read a line from the buffer and put it in @line.
+ * 
+ * @param line A string where the line will be put.
+ * @return true if a complete line was read or false otherwise.
+ */
 bool
 NetNinnyBuffer::readLine(string& line)
 {
@@ -108,14 +131,13 @@ NetNinnyBuffer::readLine(string& line)
     return false;
 }
 
-void
-NetNinnyBuffer::seek(size_t index)
-{
-    assert(index < m_block_size * m_blocks.size());
-
-    m_index = index;
-}
-
+/**
+ * Get the data block at @index.
+ * 
+ * @param index The index of the data block to get
+ * @param block_size The size of the block returned.
+ * @return The data block.
+ */
 char*
 NetNinnyBuffer::getBlock(size_t index, size_t& block_size)
 {
@@ -153,6 +175,12 @@ NetNinnyProxy::NetNinnyProxy(int sockfd)
 {
 }
 
+/**
+ * Read a request from the client into buffer.
+ * 
+ * @param a NetNinnyBuffer in which the request should be stored.
+ * @return true if a complete request was received, false otherwise.
+ */
 bool
 NetNinnyProxy::readRequest(NetNinnyBuffer& buffer)
 {
@@ -198,6 +226,11 @@ NetNinnyProxy::readRequest(NetNinnyBuffer& buffer)
     }
 }
 
+/**
+ * Read a response from the server into buffer.
+ * 
+ * @param buffer a NetNinnyBuffer in which the response should be stored.
+ */
 void
 NetNinnyProxy::readResponse(NetNinnyBuffer& buffer)
 {
@@ -225,20 +258,32 @@ NetNinnyProxy::readResponse(NetNinnyBuffer& buffer)
     }
 }
 
+/**
+ * Build a new request to be sent to the real server from the request in @request.
+ * 
+ * @param request A NetNinnyBuffer containing the headers of the request received
+ *        from the client.
+ * @param request_line The request-line that should be used for the new request.
+ * @param (out) new_request The new request that was created.
+ * @param (out) keep_alive True if request contained a "Connection: Keep-Alive"
+ *        header.
+ * @param (out) host A string containing the host that the request should be
+ * sent to.
+ */
 static void
-buildNewRequest(NetNinnyBuffer& buffer, string& request_line,
+buildNewRequest(NetNinnyBuffer& request, string& request_line,
                 string& new_request, bool& keep_alive, string& host)
 {
     keep_alive = false;
     static const char* connection_header = "Connection: Close\r\n";
     string line;
 
-    new_request.reserve(buffer.getSize() + strlen(connection_header));
+    new_request.reserve(request.getSize() + strlen(connection_header));
 
     new_request.append(request_line);
     
     // Read header fields
-    while (buffer.readLine(line))
+    while (request.readLine(line))
     {
         static const char* CONNECTION = "connection:";
         static const char* PROXY_CONNECTION = "proxy-connection:";
@@ -280,6 +325,13 @@ buildNewRequest(NetNinnyBuffer& buffer, string& request_line,
     new_request.append("\r\n");
 }
 
+/**
+ * Send a message to @socket.
+ * 
+ * @param socket The socket which should be used to send the message.
+ * @param data A character array of data to send.
+ * @param size The number of bytes in @data.
+ */
 static void
 sendMessage(int socket, const char* data, size_t size)
 {
@@ -296,6 +348,12 @@ sendMessage(int socket, const char* data, size_t size)
     }
 }
 
+/**
+ * Connect to the server at @host.
+ * 
+ * @param host A string with the hostname of the server to connect to.
+ * @return true if the connection was succesful, false otherwise.
+ */
 bool
 NetNinnyProxy::connectToServer(string& host)
 {
@@ -342,6 +400,12 @@ NetNinnyProxy::connectToServer(string& host)
     return true;
 }
 
+/**
+ * Filter the http response contained in @buffer.
+ * 
+ * @param buffer A NetNinnyBuffer containing the response to filter.
+ * @return true if the response contained forbidden content or false otherwise.
+ */
 bool
 NetNinnyProxy::filterResponse(NetNinnyBuffer& buffer)
 {
@@ -398,6 +462,12 @@ NetNinnyProxy::filterResponse(NetNinnyBuffer& buffer)
     return false;
 }
 
+/**
+ * Read a request from the client and handle it.
+ * 
+ * @param keep_alive true if the connection should be kept alive or false
+ * otherwise.
+ */
 void
 NetNinnyProxy::handleRequest(bool& keep_alive)
 {
@@ -418,10 +488,13 @@ NetNinnyProxy::handleRequest(bool& keep_alive)
     if (strncmp(cline, "GET", 3))
         throw "Not GET request";
 
+    // extract the path from the request
     const char* cpath = strstr(cline, " ");
     if (!cpath)
         throw "No path specified in GET request";
-    while (*cpath == ' ') cpath++;
+    while (*cpath == ' ') cpath++; // skip extra whitespace
+
+    // skip hostname if it's provided
     if (!strncmp(cpath, "http://", strlen("http://")))
     {
         cpath += strlen("http://");
@@ -445,6 +518,7 @@ NetNinnyProxy::handleRequest(bool& keep_alive)
         }
     }
 
+    // Build the new request-line
     string request_line("GET ");
     request_line.append(path);
     request_line.append(cpath_end);
@@ -480,6 +554,11 @@ NetNinnyProxy::handleRequest(bool& keep_alive)
     }
 }
 
+/**
+ * Run the proxy.
+ * 
+ * @return An integer with the exit code.
+ */
 int
 NetNinnyProxy::run()
 {
