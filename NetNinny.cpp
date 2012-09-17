@@ -28,7 +28,7 @@ using namespace std;
 class NetNinny
 {
 private:
-    static string mPort;
+    string mPort;
     static const int BACKLOG = 10;
     
 public:
@@ -71,7 +71,7 @@ NetNinny::run()
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE; // use my IP
 
-    if ((rv = getaddrinfo(NULL, NetNinny::PORT, &hints, &servinfo)) != 0) {
+    if ((rv = getaddrinfo(NULL, mPort.c_str(), &hints, &servinfo)) != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
         return 1;
     }
@@ -157,15 +157,12 @@ NetNinny::run()
 }
 
 int main(int argc, char* argv[]) {
-    const char* USAGE = "Usage: NetNinny PORTNUMBER\n"
-    char* port;
-    if (argc == 0)
+    const char* USAGE = "Usage: NetNinny PORTNUMBER\n";
+    if (argc != 2)
         cerr << USAGE;
-    else if (argc > 1) 
-        cout << USAGE;
     else
     {
-        NetNinny ninny(argv[0]);
+        NetNinny ninny(argv[1]);
         return ninny.run();
     }
     return -1;
