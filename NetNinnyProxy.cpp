@@ -95,7 +95,7 @@ NetNinnyBuffer::dataWritten(size_t size)
  * @return The character.
  */
 char
-NetNinnyBuffer::getChar(size_t index)
+NetNinnyBuffer::operator[](size_t index) const
 {
     assert(index < m_block_size * m_blocks.size());
 
@@ -116,7 +116,7 @@ NetNinnyBuffer::readLine(string& line)
 
     for (; m_index < m_size; ++m_index)
     {
-        char c = getChar(m_index);
+        char c = (*this)[m_index];
         
         if (c == '\n' && !line.empty() && (*line.rbegin()) == '\r')
         {
@@ -218,8 +218,8 @@ NetNinnyProxy::readRequest(NetNinnyBuffer& buffer)
             size_t size = buffer.getSize();
             if (size >= 4)
             {
-                if (buffer.getChar(size - 4) == '\r' && buffer.getChar(size - 3) == '\n' && 
-                    buffer.getChar(size - 2) == '\r' &&  buffer.getChar(size - 1) == '\n') 
+                if (buffer[size - 4] == '\r' && buffer[size - 3] == '\n' && 
+                    buffer[size - 2] == '\r' &&  buffer[size - 1] == '\n') 
                     return true;
             }
         }
@@ -447,7 +447,7 @@ NetNinnyProxy::filterResponse(NetNinnyBuffer& buffer)
             const char* w = *word;
             while (j < buffer.getSize() && *w != '\0')
             {
-                if (toupper(buffer.getChar(j)) != toupper(*w))
+                if (toupper(buffer[j]) != toupper(*w))
                     break;
 
                 ++j;

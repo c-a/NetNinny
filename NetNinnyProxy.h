@@ -43,7 +43,7 @@ public:
     char* reserveData(size_t& size);
     void dataWritten(size_t size);
 
-    char getChar(size_t index);
+    char operator[](size_t index) const;
     bool readLine(string& line);
 
     char* getBlock(size_t index, size_t &block_ssize);
