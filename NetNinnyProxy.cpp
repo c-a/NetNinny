@@ -89,7 +89,10 @@ NetNinnyBuffer::reserveData(size_t& size)
         return block;
     }
     else
+    {
         assert(!"Should not be here");
+        return NULL;
+    }
 }
 
 /**
@@ -506,6 +509,8 @@ NetNinnyProxy::connectToServer(string& host)
 }
 
 /**
+ * Requirement #7
+ *
  * @return true if the response is one that can be filtered and therefore need to be buffered.
  */
 static bool
@@ -546,6 +551,8 @@ isFilterableResponse(NetNinnyBuffer& buffer)
 /**
  * Filter the http response contained in @buffer.
  * 
+ * Requirement #3
+ *
  * @param buffer A NetNinnyBuffer containing the response to filter.
  * @return true if the response contained forbidden content or false otherwise.
  */
@@ -625,6 +632,7 @@ NetNinnyProxy::handleRequest(bool& keep_alive)
     string path(cpath, cpath_end - cpath);
 
     // Do the path filtering
+    // Requirement #2
     for (const char** word = filter_words; *word; ++word)
     {
         if (strcasestr(path.c_str(), *word))
