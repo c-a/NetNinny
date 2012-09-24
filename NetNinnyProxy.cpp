@@ -353,6 +353,7 @@ sendMessage(int socket, const char* data, size_t size)
  * the rest from the server.
  *
  * @param buffer The start of the response.
+ */
 void
 NetNinnyProxy::streamResponse(NetNinnyBuffer& buffer)
 {
