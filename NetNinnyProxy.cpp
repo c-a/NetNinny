@@ -245,6 +245,53 @@ NetNinnyProxy::readRequest(NetNinnyBuffer& buffer)
 }
 
 /**
+ * Read a response header from the server into buffer.
+ * 
+ * @param buffer a NetNinnyBuffer in which the response should be stored.
+ */
+void
+NetNinnyProxy::readResponseHeader(NetNinnyBuffer& buffer)
+{
+    while (true)
+    {
+        char* data;
+        size_t data_size;
+
+        data = buffer.reserveData(data_size);
+
+        ssize_t ret = recv(server_socket, data, data_size, 0);
+        if (ret == -1)
+        {
+            perror("recv");
+            throw "Failed to read response (recv failed)";
+        }
+        else if (ret == 0)
+        {
+            close(server_socket);
+            server_socket = -1;
+            return;
+        }
+        else
+        {
+            size_t start_index = buffer.getSize();
+            if (start_index >= 3)
+                start_index -= 3;
+            else
+                start_index = 0;
+
+            buffer.dataWritten(ret);
+
+            for (; start_index < buffer.getSize() - 4; ++start_index)
+            {
+                if (buffer[start_index] == '\r' && buffer[start_index + 1] == '\n' &&
+                    buffer[start_index] == '\r' && buffer[start_index + 1] == '\n')
+                    return;
+            }
+        }
+    }
+}
+
+/**
  * Read a response from the server into buffer.
  * 
  * @param buffer a NetNinnyBuffer in which the response should be stored.
@@ -272,7 +319,69 @@ NetNinnyProxy::readResponse(NetNinnyBuffer& buffer)
             return;
         }
         else
+        {
             buffer.dataWritten(ret);
+        }
+    }
+}
+
+/**
+ * Send a message to @socket.
+ * 
+ * @param socket The socket which should be used to send the message.
+ * @param data A character array of data to send.
+ * @param size The number of bytes in @data.
+ */
+static void
+sendMessage(int socket, const char* data, size_t size)
+{
+    size_t sent = 0;
+    while (sent < size)
+    {
+        ssize_t ret = send(socket, data + sent, size - sent, 0);
+        if (ret == -1)
+        {
+            perror("send");
+            throw "Failed to send message";
+        }
+        sent += ret;
+    }
+}
+
+/**
+ * Send the start of the response found in @buffer and stream
+ * the rest from the server.
+ *
+ * @param buffer The start of the response.
+void
+NetNinnyProxy::streamResponse(NetNinnyBuffer& buffer)
+{
+    // Send the response back to the client
+    for (size_t i = 0; i < buffer.getNumBlocks(); i++)
+    {
+        size_t block_size;
+        char *block = buffer.getBlock(i, block_size);
+        sendMessage(client_socket, block, block_size);
+    }
+
+    while (true)
+    {
+        char buffer[512];
+
+        ssize_t ret = recv(server_socket, buffer, 512, 0);
+        if (ret == -1)
+        {
+            perror("recv");
+            throw "Failed to read response (recv failed)";
+        }
+        else if (ret == 0)
+        {
+            close(server_socket);
+            server_socket = -1;
+            return;
+        }
+        else
+            sendMessage(client_socket, buffer, ret);
     }
 }
 
@@ -344,29 +453,6 @@ buildNewRequest(NetNinnyBuffer& request, string& request_line,
 }
 
 /**
- * Send a message to @socket.
- * 
- * @param socket The socket which should be used to send the message.
- * @param data A character array of data to send.
- * @param size The number of bytes in @data.
- */
-static void
-sendMessage(int socket, const char* data, size_t size)
-{
-    size_t sent = 0;
-    while (sent < size)
-    {
-        ssize_t ret = send(socket, data + sent, size - sent, 0);
-        if (ret == -1)
-        {
-            perror("send");
-            throw "Failed to send message";
-        }
-        sent += ret;
-    }
-}
-
-/**
  * Connect to the server at @host.
  * 
  * @param host A string with the hostname of the server to connect to.
@@ -419,13 +505,10 @@ NetNinnyProxy::connectToServer(string& host)
 }
 
 /**
- * Filter the http response contained in @buffer.
- * 
- * @param buffer A NetNinnyBuffer containing the response to filter.
- * @return true if the response contained forbidden content or false otherwise.
+ * @return true if the response is one that can be filtered and therefore need to be buffered.
  */
-bool
-NetNinnyProxy::filterResponse(NetNinnyBuffer& buffer)
+static bool
+isFilterableResponse(NetNinnyBuffer& buffer)
 {
     string line;
 
@@ -455,6 +538,20 @@ NetNinnyProxy::filterResponse(NetNinnyBuffer& buffer)
         else if (!strncasecmp(cline, CONTENT_ENCODING, strlen(CONTENT_ENCODING)))
             return false;
     }
+
+    return true;
+}
+
+/**
+ * Filter the http response contained in @buffer.
+ * 
+ * @param buffer A NetNinnyBuffer containing the response to filter.
+ * @return true if the response contained forbidden content or false otherwise.
+ */
+bool
+NetNinnyProxy::filterResponse(NetNinnyBuffer& buffer)
+{
+    string line;
 
     // Search for the forbidden strings in the content.
     for (size_t i = buffer.getIndex(); i < buffer.getSize(); ++i)
@@ -556,23 +653,30 @@ NetNinnyProxy::handleRequest(bool& keep_alive)
 
     // Read the response from the server
     NetNinnyBuffer response(BLOCK_SIZE);
-    readResponse(response);
+    readResponseHeader(response);
 
-    if (filterResponse(response))
+    if (isFilterableResponse(response))
     {
-        cout << "Content was filtered\n";
-        sendMessage(client_socket, error2_redirect, strlen(error2_redirect));
-    }
-    else
-    {
-        // Send the response back to the client
-        for (size_t i = 0; i < response.getNumBlocks(); i++)
+        readResponse(response);
+
+        if (filterResponse(response))
         {
-            size_t block_size;
-            char *block = response.getBlock(i, block_size);
-            sendMessage(client_socket, block, block_size);
+            cout << "Content was filtered\n";
+            sendMessage(client_socket, error2_redirect, strlen(error2_redirect));
+        }
+        else
+        {
+            // Send the response back to the client
+            for (size_t i = 0; i < response.getNumBlocks(); i++)
+            {
+                size_t block_size;
+                char *block = response.getBlock(i, block_size);
+                sendMessage(client_socket, block, block_size);
+            }
         }
     }
+    else
+        streamResponse(response);
 }
 
 /**

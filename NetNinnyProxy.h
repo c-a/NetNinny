@@ -62,7 +62,9 @@ private:
     int client_socket, server_socket;
 
     bool readRequest(NetNinnyBuffer& buffer);
+    void readResponseHeader(NetNinnyBuffer& buffer);
     void readResponse(NetNinnyBuffer& buffer);
+    void streamResponse(NetNinnyBuffer& buffer);
 
     bool connectToServer(string& host);
     bool filterResponse(NetNinnyBuffer& buffer);
