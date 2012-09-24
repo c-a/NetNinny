@@ -41,6 +41,24 @@ static const char* error2_redirect =
     "Content-Length: 0\r\n"
     "\r\n";
 
+#ifndef _GNU_SOURCE
+static const char*
+strcasestr(const char* haystack, const char* needle)
+{
+    for (; *haystack; ++haystack)
+    {
+        const char* h = haystack;
+        const char* n = needle;
+        for (; *n && *h && tolower(*n) == tolower(*h); n++, h++);
+
+        if (!*n)
+            return haystack;
+    }
+
+    return NULL;
+}
+#endif
+
 NetNinnyBuffer::NetNinnyBuffer(size_t block_size) :
     m_block_size(block_size),
     m_size(0),
