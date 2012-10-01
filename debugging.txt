@@ -1,0 +1,11 @@
+Testing and debugging
+
+The testing was primarily performed through debugging output in a console. This way allowed us to examine how the program was contructing the packets in a stepwise manner.
+
+We had pretty few actual bugs that we struggled with during the development. There were three notable ones though and they were all found through different methods.
+
+First, the filtering wasn't working properly. It seemed a bit haphazard when it was working, but because the filtering code was very focused in one function, the problem was found by just inspecting the code. It was found that the filtering was made case sensitive by mistake.
+
+Secondly, sites didn't load properly. We only got partial bits of some sites while some sites worked quite well. By inspecting the packets recived by netninny and firefox respectivly, we could see that everything was ok until firefox recieved the packets. We could also determine that the content was cut at the same place all the time for the sites with troubles. This led us to inspect our data buffer and found that it wasn't properly reporting its own size and only delivering partial content in some cases.
+
+Lastly, the proxy was buffering all content, even though this wasn't neccessary. Since the sending of the content from the proxy to the web browser was separated to its own function, it was easy to just modify that part.

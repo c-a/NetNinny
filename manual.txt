@@ -1,0 +1,15 @@
+Manual
+
+To build NetNinny, use makefile if you are on a linux system or use the makefile.solaris if you are on a solaris system. No extra libraries should be required if you have the standard c/c++ libraries installed.
+
+NetNinny is launched with the format:
+    ./Netninny PORTNUMBER
+where PORTNUMBER should be an integer which describes an appropriate port. Then you can configure your browser to connect to NetNinny on the chosen port. The port is not remembered between lanches and needs to be reentered each time.
+
+The requirements are implemented in the following functions in the source:
+
+Reqs    Source file         Function
+2.      NetNinnyProxy.cpp   handleRequest
+3.      NetNinnyProxy.cpp   filterResponse
+6.      NetNinny.cpp        main
+7.      NetNinnyProxy.cpp   isFilterableResponse

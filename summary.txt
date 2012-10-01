@@ -1,0 +1,7 @@
+Summary
+
+The NetNinny proxy performs a simple text based filtering on content on the web. It searches through the url and the html content body for hard-coded inappropriate strings and redirects the user to a page informing them of the blocked content.
+
+It can only handle HTTP GET interactions with servers and not for example HTTP POST interactions. HTTPS works on a different port than HTTP and does not get filtered. Only non-compressed text content is filtered, everything else is passed through.
+
+The size of pages due to videos and images does not matter because the content is just passed through. Abnormally large text files could however lead to excessive swapping.
